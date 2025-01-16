@@ -1,5 +1,5 @@
 [package]
-name = "ore-program"
+name = "coal-program"
 description = "ORE is a proof-of-work token everyone can mine"
 version.workspace = true
 edition.workspace = true
@@ -22,8 +22,8 @@ default = []
 drillx.workspace = true
 solana-include-idl = "0.1"
 mpl-token-metadata.workspace = true
+coal-api.workspace = true
 ore-api.workspace = true
-ore-boost-api.workspace = true
 solana-program.workspace = true
 spl-token.workspace = true
 spl-associated-token-account.workspace = true

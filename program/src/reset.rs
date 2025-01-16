@@ -1,4 +1,4 @@
-use ore_api::prelude::*;
+use coal_api::prelude::*;
 use steel::*;
 
 /// Reset tops up the bus balances, updates the base reward rate, and sets up the ORE program for the next epoch.
@@ -11,32 +11,32 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     };
     signer_info.is_signer()?;
     let bus_0 = bus_0_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 0)?;
     let bus_1 = bus_1_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 1)?;
     let bus_2 = bus_2_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 2)?;
     let bus_3 = bus_3_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 3)?;
     let bus_4 = bus_4_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 4)?;
     let bus_5 = bus_5_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 5)?;
     let bus_6 = bus_6_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 6)?;
     let bus_7 = bus_7_info
-        .as_account_mut::<Bus>(&ore_api::ID)?
+        .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 7)?;
     let config = config_info
         .is_config()?
-        .as_account_mut::<Config>(&ore_api::ID)?;
+        .as_account_mut::<Config>(&coal_api::ID)?;
     let mint = mint_info
         .has_address(&MINT_ADDRESS)?
         .is_writable()?
@@ -62,13 +62,8 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     let busses = [bus_0, bus_1, bus_2, bus_3, bus_4, bus_5, bus_6, bus_7];
     let mut total_remaining_rewards = 0u64;
     let mut total_theoretical_rewards = 0u64;
-    let mut top_balance = 0u64;
-    for bus in busses {
-        // Track top balance.
-        if bus.top_balance.gt(&top_balance) {
-            top_balance = bus.top_balance;
-        }
 
+    for bus in busses {
         // Track accumulators.
         total_remaining_rewards = total_remaining_rewards.saturating_add(bus.rewards);
         total_theoretical_rewards =
@@ -77,12 +72,8 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
         // Reset bus account for new epoch.
         bus.rewards = BUS_EPOCH_REWARDS;
         bus.theoretical_rewards = 0;
-        bus.top_balance = 0;
     }
     let total_epoch_rewards = MAX_EPOCH_REWARDS.saturating_sub(total_remaining_rewards);
-
-    // Update global top balance.
-    config.top_balance = top_balance;
 
     // Update base reward rate for next epoch.
     config.base_reward_rate =
@@ -101,7 +92,7 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     }
 
     // Max supply check.
-    if mint.supply.ge(&MAX_SUPPLY) {
+    if mint.supply.ge(&config.max_supply) {
         return Err(OreError::MaxSupply.into());
     }
 
@@ -109,13 +100,14 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     let amount = MAX_SUPPLY
         .saturating_sub(mint.supply)
         .min(total_epoch_rewards);
+    
     mint_to_signed(
         mint_info,
         treasury_tokens_info,
         treasury_info,
         token_program,
         amount,
-        &[TREASURY],
+        &[TREASURY, mint_info.key.as_ref()],
     )?;
 
     Ok(())
@@ -155,7 +147,7 @@ mod tests {
     use rand::{distributions::Uniform, Rng};
 
     use crate::calculate_new_reward_rate;
-    use ore_api::consts::{
+    use coal_api::consts::{
         BASE_REWARD_RATE_MIN_THRESHOLD, BUS_EPOCH_REWARDS, MAX_EPOCH_REWARDS, SMOOTHING_FACTOR,
         TARGET_EPOCH_REWARDS,
     };

@@ -1,6 +1,7 @@
 use array_const_fn_init::array_const_fn_init;
 use const_crypto::ed25519;
 use solana_program::{pubkey, pubkey::Pubkey};
+use ore_api;
 
 /// The authority allowed to initialize the program.
 pub const INITIALIZER_ADDRESS: Pubkey = pubkey!("HBUh9g46wk2X89CvaNN15UmsznP59rh6od1h8JwYAopk");
@@ -87,6 +88,11 @@ pub const MINT_NOISE: [u8; 16] = [
     89, 157, 88, 232, 243, 249, 197, 132, 199, 49, 19, 234, 91, 94, 150, 41,
 ];
 
+/// Noise for deriving the ore mint pda
+pub const ORE_MINT_NOISE: [u8; 16] = [
+    89, 157, 88, 232, 243, 249, 197, 132, 199, 49, 19, 234, 91, 94, 150, 41,
+];
+
 /// The name for token metadata.
 pub const METADATA_NAME: &str = "ORE";
 
@@ -111,6 +117,10 @@ const fn const_bus_address(i: usize) -> Pubkey {
 pub const CONFIG_ADDRESS: Pubkey =
     Pubkey::new_from_array(ed25519::derive_program_address(&[CONFIG], &PROGRAM_ID).0);
 
+/// The address of the ore config account.
+pub const ORE_CONFIG_ADDRESS: Pubkey =
+    Pubkey::new_from_array(ed25519::derive_program_address(&[CONFIG], &ore_api::ID.to_bytes()).0);
+
 /// The address of the mint metadata account.
 pub const METADATA_ADDRESS: Pubkey = Pubkey::new_from_array(
     ed25519::derive_program_address(
@@ -128,12 +138,14 @@ pub const METADATA_ADDRESS: Pubkey = Pubkey::new_from_array(
 pub const MINT_ADDRESS: Pubkey =
     Pubkey::new_from_array(ed25519::derive_program_address(&[MINT, &MINT_NOISE], &PROGRAM_ID).0);
 
+    /// The address of the mint account.
+pub const ORE_MINT_ADDRESS: Pubkey = Pubkey::new_from_array(ed25519::derive_program_address(&[MINT, &MINT_NOISE], &ore_api::ID.to_bytes()).0);
+
 /// The bump of the mint account.
 pub const MINT_BUMP: u8 = ed25519::derive_program_address(&[MINT, &MINT_NOISE], &PROGRAM_ID).1;
 
 /// The address of the v1 mint account.
-#[deprecated(since = "2.6.0", note = "v1 tokens are no longer eligable to upgrade")]
-pub const MINT_V1_ADDRESS: Pubkey = pubkey!("oreoN2tQbHXVaZsr3pf66A48miqcBXCDJozganhEJgz");
+pub const MINT_V1_ADDRESS: Pubkey = pubkey!("E3yUqBNTZxV8ELvW99oRLC7z4ddbJqqR4NphwrMug9zu");
 
 /// The address of the treasury account.
 pub const TREASURY_ADDRESS: Pubkey =

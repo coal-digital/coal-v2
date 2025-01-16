@@ -39,8 +39,7 @@ pub struct Mine {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Open {
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bump: u8,
+    pub proof_bump: u8,
 }
 
 #[repr(C)]
@@ -58,7 +57,6 @@ pub struct Stake {
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Update {}
 
-#[deprecated(since = "2.6.0", note = "v1 tokens are no longer eligable to upgrade")]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Upgrade {
@@ -68,30 +66,12 @@ pub struct Upgrade {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Initialize {
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_0_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_1_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_2_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_3_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_4_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_5_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_6_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub bus_7_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub config_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub metadata_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
-    pub mint_bump: u8,
-    #[deprecated(since = "2.5.0", note = "Bump no longer used")]
     pub treasury_bump: u8,
+    pub mint_bump: u8,
+    pub mint_noise: [u8; 16],
+    pub metadata_name: [u8; 32],
+    pub metadata_symbol: [u8; 8],
+    pub metadata_uri: [u8; 128],
 }
 
 instruction!(OreInstruction, Claim);

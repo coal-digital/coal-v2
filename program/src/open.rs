@@ -1,13 +1,14 @@
-use std::mem::size_of;
-
-use ore_api::prelude::*;
-use solana_program::{keccak::hashv, slot_hashes::SlotHash};
+use coal_api::prelude::*;
+use ore_api;
 use steel::*;
 
 /// Open creates a new proof account to track a miner's state.
-pub fn process_open(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResult {
+pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult {
+    // Parse args.
+    let args = Open::try_from_bytes(data)?;
+
     // Load accounts.
-    let [signer_info, miner_info, payer_info, proof_info, system_program, slot_hashes_info] =
+    let [signer_info, miner_info, payer_info, proof_info, ore_proof_info, mint_info, treasury_info, system_program, slot_hashes_info] =
         accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -17,7 +18,7 @@ pub fn process_open(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResult
     proof_info
         .is_empty()?
         .is_writable()?
-        .has_seeds(&[PROOF, signer_info.key.as_ref()], &ore_api::ID)?;
+        .has_seeds(&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref()], &coal_api::ID)?;
     system_program.is_program(&system_program::ID)?;
     slot_hashes_info.is_sysvar(&sysvar::slot_hashes::ID)?;
 
@@ -26,24 +27,38 @@ pub fn process_open(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResult
         proof_info,
         system_program,
         payer_info,
-        &ore_api::ID,
-        &[PROOF, signer_info.key.as_ref()],
+        &coal_api::ID,
+        &[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref()],
     )?;
     let clock = Clock::get()?;
-    let proof = proof_info.as_account_mut::<Proof>(&ore_api::ID)?;
+    let proof = proof_info.as_account_mut::<Proof>(&coal_api::ID)?;
     proof.authority = *signer_info.key;
     proof.balance = 0;
-    proof.challenge = hashv(&[
-        signer_info.key.as_ref(),
-        &slot_hashes_info.data.borrow()[0..size_of::<SlotHash>()],
-    ])
-    .0;
-    proof.last_hash = [0; 32];
-    proof.last_hash_at = clock.unix_timestamp;
     proof.last_stake_at = clock.unix_timestamp;
     proof.miner = *miner_info.key;
     proof.total_hashes = 0;
     proof.total_rewards = 0;
+    proof.bump = args.proof_bump as u64;
+
+
+    let open_accounts = &[
+        proof_info.clone(),
+        treasury_info.clone(),
+        payer_info.clone(),
+        ore_proof_info.clone(),
+        system_program.clone(),
+        slot_hashes_info.clone()
+    ];
+
+    solana_program::program::invoke_signed(
+        &ore_api::sdk::open(
+            *proof_info.key,
+            *treasury_info.key,
+            *payer_info.key,
+        ),
+        open_accounts,
+        &[&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref(), &[args.proof_bump]]]
+    )?;
 
     Ok(())
 }

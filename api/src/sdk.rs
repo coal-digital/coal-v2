@@ -1,5 +1,12 @@
 use drillx::Solution;
 use steel::*;
+use ore_api::{
+    state::proof_pda as ore_proof_pda,
+    consts::{
+        TREASURY_ADDRESS as ORE_TREASURY_ADDRESS,
+        TREASURY_TOKENS_ADDRESS as ORE_TREASURY_TOKENS_ADDRESS,
+    },
+};
 
 use crate::{
     consts::*,
@@ -17,16 +24,33 @@ pub fn auth(proof: Pubkey) -> Instruction {
 }
 
 /// Builds a claim instruction.
-pub fn claim(signer: Pubkey, beneficiary: Pubkey, amount: u64) -> Instruction {
-    let proof = proof_pda(signer).0;
+pub fn claim(mint: Pubkey, signer: Pubkey, beneficiary: Pubkey, amount: u64) -> Instruction {
+    let proof = proof_pda(mint, signer).0;
+    let ore_proof: (Pubkey, u8) = ore_proof_pda(signer);
+
+    let treasury = treasury_pda(mint);
+    let treasury_tokens_address = spl_associated_token_account::get_associated_token_address(
+        &treasury.0,
+        &mint,
+    );
+    let treasury_ore_tokens_address = spl_associated_token_account::get_associated_token_address(
+        &treasury.0,
+        &ORE_MINT_ADDRESS,
+    );
+
     Instruction {
         program_id: crate::ID,
         accounts: vec![
             AccountMeta::new(signer, true),
             AccountMeta::new(beneficiary, false),
             AccountMeta::new(proof, false),
-            AccountMeta::new_readonly(TREASURY_ADDRESS, false),
-            AccountMeta::new(TREASURY_TOKENS_ADDRESS, false),
+            AccountMeta::new(mint, false),
+            AccountMeta::new(ore_proof.0, false),
+            AccountMeta::new_readonly(treasury.0, false),
+            AccountMeta::new(treasury_tokens_address, false),
+            AccountMeta::new(treasury_ore_tokens_address, false),
+            AccountMeta::new_readonly(ORE_TREASURY_ADDRESS, false),
+            AccountMeta::new(ORE_TREASURY_TOKENS_ADDRESS, false),
             AccountMeta::new_readonly(spl_token::ID, false),
         ],
         data: Claim {
@@ -37,13 +61,16 @@ pub fn claim(signer: Pubkey, beneficiary: Pubkey, amount: u64) -> Instruction {
 }
 
 /// Builds a close instruction.
-pub fn close(signer: Pubkey) -> Instruction {
-    let proof = proof_pda(signer).0;
+pub fn close(mint: Pubkey, signer: Pubkey) -> Instruction {
+    let proof = proof_pda(mint, signer).0;
+    let ore_proof: (Pubkey, u8) = ore_proof_pda(signer);
+    
     Instruction {
         program_id: crate::ID,
         accounts: vec![
             AccountMeta::new(signer, true),
             AccountMeta::new(proof, false),
+            AccountMeta::new(ore_proof.0, false),
             AccountMeta::new_readonly(solana_program::system_program::ID, false),
         ],
         data: Close {}.to_bytes(),
@@ -52,28 +79,33 @@ pub fn close(signer: Pubkey) -> Instruction {
 
 /// Builds a mine instruction.
 pub fn mine(
+    mint: Pubkey,
     signer: Pubkey,
     authority: Pubkey,
-    bus: Pubkey,
+    coal_bus: Pubkey,
+    ore_bus: Pubkey,
     solution: Solution,
-    boost_accounts: Vec<Pubkey>,
+    additional_accounts: Vec<Pubkey>,
 ) -> Instruction {
-    let proof = proof_pda(authority).0;
+    let proof = proof_pda(mint, authority).0;
     let required_accounts = vec![
         AccountMeta::new(signer, true),
-        AccountMeta::new(bus, false),
+        AccountMeta::new(MINT_ADDRESS, false),
+        AccountMeta::new(coal_bus, false),
         AccountMeta::new_readonly(CONFIG_ADDRESS, false),
+        AccountMeta::new(ore_bus, false),
+        AccountMeta::new_readonly(ORE_CONFIG_ADDRESS, false),
         AccountMeta::new(proof, false),
         AccountMeta::new_readonly(sysvar::instructions::ID, false),
         AccountMeta::new_readonly(sysvar::slot_hashes::ID, false),
     ];
-    let optional_accounts = boost_accounts
+    let additional_accounts = additional_accounts
         .into_iter()
         .map(|pk| AccountMeta::new_readonly(pk, false))
         .collect();
     Instruction {
         program_id: crate::ID,
-        accounts: [required_accounts, optional_accounts].concat(),
+        accounts: [required_accounts, additional_accounts].concat(),
         data: Mine {
             digest: solution.d,
             nonce: solution.n,
@@ -83,9 +115,9 @@ pub fn mine(
 }
 
 /// Builds an open instruction.
-#[allow(deprecated)]
-pub fn open(signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
-    let proof_pda = proof_pda(signer);
+pub fn open(mint: Pubkey,   signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
+    let proof_pda: (Pubkey, u8) = proof_pda(mint, signer);
+    let ore_proof_pda = ore_proof_pda(signer);
     Instruction {
         program_id: crate::ID,
         accounts: vec![
@@ -93,31 +125,48 @@ pub fn open(signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
             AccountMeta::new_readonly(miner, false),
             AccountMeta::new(payer, true),
             AccountMeta::new(proof_pda.0, false),
+            AccountMeta::new(ore_proof_pda.0, false),
             AccountMeta::new_readonly(solana_program::system_program::ID, false),
             AccountMeta::new_readonly(sysvar::slot_hashes::ID, false),
         ],
-        data: Open { bump: proof_pda.1 }.to_bytes(),
+        data: Open { proof_bump: proof_pda.1 }.to_bytes(),
     }
 }
 
 /// Builds a reset instruction.
-pub fn reset(signer: Pubkey) -> Instruction {
+pub fn reset(mint: Pubkey, signer: Pubkey) -> Instruction {
+    let bus_pdas = [
+        bus_pda(mint, 0),
+        bus_pda(mint, 1),
+        bus_pda(mint, 2),
+        bus_pda(mint, 3),
+        bus_pda(mint, 4),
+        bus_pda(mint, 5),
+        bus_pda(mint, 6),
+        bus_pda(mint, 7),
+    ];
+    let config_pda = config_pda(mint);
+    let treasury_tokens_address = spl_associated_token_account::get_associated_token_address(
+        &TREASURY_ADDRESS,
+        &mint,
+    );
+
     Instruction {
         program_id: crate::ID,
         accounts: vec![
             AccountMeta::new(signer, true),
-            AccountMeta::new(BUS_ADDRESSES[0], false),
-            AccountMeta::new(BUS_ADDRESSES[1], false),
-            AccountMeta::new(BUS_ADDRESSES[2], false),
-            AccountMeta::new(BUS_ADDRESSES[3], false),
-            AccountMeta::new(BUS_ADDRESSES[4], false),
-            AccountMeta::new(BUS_ADDRESSES[5], false),
-            AccountMeta::new(BUS_ADDRESSES[6], false),
-            AccountMeta::new(BUS_ADDRESSES[7], false),
-            AccountMeta::new(CONFIG_ADDRESS, false),
-            AccountMeta::new(MINT_ADDRESS, false),
+            AccountMeta::new(bus_pdas[0].0, false),
+            AccountMeta::new(bus_pdas[1].0, false),
+            AccountMeta::new(bus_pdas[2].0, false),
+            AccountMeta::new(bus_pdas[3].0, false),
+            AccountMeta::new(bus_pdas[4].0, false),
+            AccountMeta::new(bus_pdas[5].0, false),
+            AccountMeta::new(bus_pdas[6].0, false),
+            AccountMeta::new(bus_pdas[7].0, false),
+            AccountMeta::new(config_pda.0, false),
+            AccountMeta::new(mint, false),
             AccountMeta::new(TREASURY_ADDRESS, false),
-            AccountMeta::new(TREASURY_TOKENS_ADDRESS, false),
+            AccountMeta::new(treasury_tokens_address, false),
             AccountMeta::new_readonly(spl_token::ID, false),
         ],
         data: Reset {}.to_bytes(),
@@ -125,10 +174,8 @@ pub fn reset(signer: Pubkey) -> Instruction {
 }
 
 /// Build a stake instruction.
-#[allow(deprecated)]
-#[deprecated(since = "2.4.0", note = "Please stake with the boost program")]
-pub fn stake(signer: Pubkey, sender: Pubkey, amount: u64) -> Instruction {
-    let proof = proof_pda(signer).0;
+pub fn stake(mint: Pubkey, signer: Pubkey, sender: Pubkey, amount: u64) -> Instruction {
+    let proof = proof_pda(mint, signer).0;
     Instruction {
         program_id: crate::ID,
         accounts: vec![
@@ -146,8 +193,8 @@ pub fn stake(signer: Pubkey, sender: Pubkey, amount: u64) -> Instruction {
 }
 
 // Build an update instruction.
-pub fn update(signer: Pubkey, miner: Pubkey) -> Instruction {
-    let proof = proof_pda(signer).0;
+pub fn update(mint: Pubkey, signer: Pubkey, miner: Pubkey) -> Instruction {
+    let proof = proof_pda(mint, signer).0;
     Instruction {
         program_id: crate::ID,
         accounts: vec![
@@ -159,9 +206,7 @@ pub fn update(signer: Pubkey, miner: Pubkey) -> Instruction {
     }
 }
 
-// Build an upgrade instruction.
-#[allow(deprecated)]
-#[deprecated(since = "2.6.0", note = "v1 tokens are no longer eligable to upgrade")]
+// Build an upgrade instruction for COAL v1 to v2.
 pub fn upgrade(signer: Pubkey, beneficiary: Pubkey, sender: Pubkey, amount: u64) -> Instruction {
     Instruction {
         program_id: crate::ID,
@@ -182,21 +227,28 @@ pub fn upgrade(signer: Pubkey, beneficiary: Pubkey, sender: Pubkey, amount: u64)
 }
 
 /// Builds an initialize instruction.
-#[allow(deprecated)]
-pub fn initialize(signer: Pubkey) -> Instruction {
+pub fn initialize(signer: Pubkey, mint_noise: [u8; 16]) -> Instruction {
+    let mint_pda = Pubkey::find_program_address(&[MINT, mint_noise.as_slice()], &crate::ID);
     let bus_pdas = [
-        bus_pda(0),
-        bus_pda(1),
-        bus_pda(2),
-        bus_pda(3),
-        bus_pda(4),
-        bus_pda(5),
-        bus_pda(6),
-        bus_pda(7),
+        bus_pda(mint_pda.0, 0),
+        bus_pda(mint_pda.0, 1),
+        bus_pda(mint_pda.0, 2),
+        bus_pda(mint_pda.0, 3),
+        bus_pda(mint_pda.0, 4),
+        bus_pda(mint_pda.0, 5),
+        bus_pda(mint_pda.0, 6),
+        bus_pda(mint_pda.0, 7),
     ];
-    let config_pda = config_pda();
-    let mint_pda = Pubkey::find_program_address(&[MINT, MINT_NOISE.as_slice()], &crate::ID);
-    let treasury_pda = treasury_pda();
+    let config_pda = config_pda(mint_pda.0);
+    let treasury_pda = treasury_pda(mint_pda.0);
+    let treasury_tokens_address = spl_associated_token_account::get_associated_token_address(
+        &treasury_pda.0,
+        &mint_pda.0,
+    );
+    let ore_treasury_tokens_address = spl_associated_token_account::get_associated_token_address(
+        &treasury_pda.0,
+        &ORE_MINT_ADDRESS,
+    );
     let metadata_pda = Pubkey::find_program_address(
         &[
             METADATA,
@@ -205,6 +257,7 @@ pub fn initialize(signer: Pubkey) -> Instruction {
         ],
         &mpl_token_metadata::ID,
     );
+
     Instruction {
         program_id: crate::ID,
         accounts: vec![
@@ -220,8 +273,10 @@ pub fn initialize(signer: Pubkey) -> Instruction {
             AccountMeta::new(config_pda.0, false),
             AccountMeta::new(metadata_pda.0, false),
             AccountMeta::new(mint_pda.0, false),
+            AccountMeta::new(ORE_MINT_ADDRESS, false),
             AccountMeta::new(treasury_pda.0, false),
-            AccountMeta::new(TREASURY_TOKENS_ADDRESS, false),
+            AccountMeta::new(treasury_tokens_address, false),
+            AccountMeta::new(ore_treasury_tokens_address, false),
             AccountMeta::new_readonly(system_program::ID, false),
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new_readonly(spl_associated_token_account::ID, false),
@@ -229,18 +284,12 @@ pub fn initialize(signer: Pubkey) -> Instruction {
             AccountMeta::new_readonly(sysvar::rent::ID, false),
         ],
         data: Initialize {
-            bus_0_bump: bus_pdas[0].1,
-            bus_1_bump: bus_pdas[1].1,
-            bus_2_bump: bus_pdas[2].1,
-            bus_3_bump: bus_pdas[3].1,
-            bus_4_bump: bus_pdas[4].1,
-            bus_5_bump: bus_pdas[5].1,
-            bus_6_bump: bus_pdas[6].1,
-            bus_7_bump: bus_pdas[7].1,
-            config_bump: config_pda.1,
-            metadata_bump: metadata_pda.1,
-            mint_bump: mint_pda.1,
+            mint_noise,
             treasury_bump: treasury_pda.1,
+            mint_bump: mint_pda.1,
+            metadata_name: METADATA_NAME.to_string().as_bytes()[..32].try_into().unwrap(),
+            metadata_symbol: METADATA_SYMBOL.to_string().as_bytes()[..8].try_into().unwrap(),
+            metadata_uri: METADATA_URI.to_string().as_bytes()[..128].try_into().unwrap(),
         }
         .to_bytes(),
     }
