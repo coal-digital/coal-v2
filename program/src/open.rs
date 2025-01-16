@@ -8,7 +8,7 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
     let args = Open::try_from_bytes(data)?;
 
     // Load accounts.
-    let [signer_info, miner_info, payer_info, proof_info, ore_proof_info, mint_info, treasury_info, system_program, slot_hashes_info] =
+    let [signer_info, miner_info, payer_info, proof_info, ore_proof_info, mint_info, system_program, slot_hashes_info] =
         accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -19,6 +19,7 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
         .is_empty()?
         .is_writable()?
         .has_seeds(&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref()], &coal_api::ID)?;
+    mint_info.as_mint()?;
     system_program.is_program(&system_program::ID)?;
     slot_hashes_info.is_sysvar(&sysvar::slot_hashes::ID)?;
 
@@ -43,7 +44,7 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
 
     let open_accounts = &[
         proof_info.clone(),
-        treasury_info.clone(),
+        mint_info.clone(),
         payer_info.clone(),
         ore_proof_info.clone(),
         system_program.clone(),
@@ -53,7 +54,8 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
     solana_program::program::invoke_signed(
         &ore_api::sdk::open(
             *proof_info.key,
-            *treasury_info.key,
+            // COAL mint is the miner for all tokens
+            MINT_ADDRESS,
             *payer_info.key,
         ),
         open_accounts,

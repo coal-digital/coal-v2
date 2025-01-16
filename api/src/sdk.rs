@@ -115,7 +115,7 @@ pub fn mine(
 }
 
 /// Builds an open instruction.
-pub fn open(mint: Pubkey,   signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
+pub fn open(mint: Pubkey, signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
     let proof_pda: (Pubkey, u8) = proof_pda(mint, signer);
     let ore_proof_pda = ore_proof_pda(signer);
     Instruction {
@@ -126,6 +126,7 @@ pub fn open(mint: Pubkey,   signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Ins
             AccountMeta::new(payer, true),
             AccountMeta::new(proof_pda.0, false),
             AccountMeta::new(ore_proof_pda.0, false),
+            AccountMeta::new(MINT_ADDRESS, false),
             AccountMeta::new_readonly(solana_program::system_program::ID, false),
             AccountMeta::new_readonly(sysvar::slot_hashes::ID, false),
         ],
