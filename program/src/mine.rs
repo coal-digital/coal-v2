@@ -15,7 +15,7 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let (required_accounts, optional_accounts) = accounts.split_at(9);
     let split_index = optional_accounts.iter().position(|acc| acc.owner.eq(&ore_api::ID)).unwrap();
     let (coal_optional_accounts, ore_optional_accounts) = optional_accounts.split_at(split_index);
-    let [signer_info, mint_info, bus_info, config_info, proof_info, ore_bus_info, ore_config_info, ore_proof_info, instructions_sysvar, slot_hashes_sysvar] =
+    let [signer_info, coal_mint_info, bus_info, config_info, proof_info, ore_bus_info, ore_config_info, ore_proof_info, instructions_sysvar, slot_hashes_sysvar] =
         required_accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -43,19 +43,20 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
      let hash = solution.to_hash();
      let difficulty = hash.difficulty();
      let mine_accounts = &[
-         signer_info.clone(),
+         coal_mint_info.clone(),
          ore_bus_info.clone(),
          ore_config_info.clone(),
          ore_proof_info.clone(),
          instructions_sysvar.clone(),
          slot_hashes_sysvar.clone(),
      ];
+    
      let mine_accounts = [mine_accounts, ore_optional_accounts].concat();
      let ore_optional_accounts = optional_accounts.iter().map(|a| *a.key).collect();
     
     solana_program::program::invoke_signed(
         &ore_api::sdk::mine(
-            *mint_info.key,
+            *coal_mint_info.key,
             *proof_info.key,
             *ore_bus_info.key,
             solution,
