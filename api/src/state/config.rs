@@ -4,9 +4,19 @@ use super::OreAccount;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
+pub struct Ingredient {
+    pub mint: Pubkey,
+    pub ratio: f64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Pod, Zeroable)]
 pub struct Config {
     /// The token this config is for.
     pub mint: Pubkey,
+
+    /// The mint of the migration token.
+    pub migration_mint: Pubkey,
 
     /// Max supply of the token.
     pub max_supply: u64,
@@ -26,9 +36,6 @@ pub struct Config {
     /// The total lifetime COAL rewards distributed to miners.
     pub total_rewards: u64,
 
-    /// The total ORE balance in the treasury.
-    pub total_ore_balance: u64,
-
     /// The target emission rate per epoch.
     pub initial_epoch_rewards: u64,
 
@@ -41,6 +48,12 @@ pub struct Config {
 
     /// The decay rate in basis points
     pub decay_basis_points: u64,
+
+    /// An ingredient that is wrapped in the treasury.
+    pub wrapped_ingredient: Ingredient,
+
+    /// An ingredient that is burned in the treasury.
+    pub burned_ingredient: Ingredient,
 }
 
 impl Config {

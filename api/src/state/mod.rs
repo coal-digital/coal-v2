@@ -37,7 +37,7 @@ pub fn proof_pda(mint: Pubkey, authority: Pubkey) -> (Pubkey, u8) {
 }
 
 /// Derive the PDA of the treasury account.
-pub fn treasury_pda(mint: Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[TREASURY, mint.as_ref()], &crate::id())
+pub fn treasury_pda() -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[TREASURY], &crate::id())
 }
     

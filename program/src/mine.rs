@@ -1,6 +1,9 @@
+use std::ops::Div;
+
 use drillx::Solution;
 use coal_api::prelude::*;
 use ore_api;
+use ore_boost_api;
 use steel::*;
 
 /// Mine validates hashes and increments a miner's claimable balance.
@@ -12,10 +15,10 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let clock = Clock::get()?;
     let t: i64 = clock.unix_timestamp;
     
-    let (required_accounts, optional_accounts) = accounts.split_at(9);
-    let split_index = optional_accounts.iter().position(|acc| acc.owner.eq(&ore_api::ID)).unwrap();
-    let (coal_optional_accounts, ore_optional_accounts) = optional_accounts.split_at(split_index);
-    let [signer_info, coal_mint_info, bus_info, config_info, proof_info, ore_bus_info, ore_config_info, ore_proof_info, instructions_sysvar, slot_hashes_sysvar] =
+    let (required_accounts, optional_accounts) = accounts.split_at(14);
+    let split_index = optional_accounts.iter().position(|acc| acc.owner.eq(&ore_boost_api::ID)).unwrap_or(optional_accounts.len());
+    let (coal_optional_accounts, boost_accounts) = optional_accounts.split_at(split_index);
+    let [signer_info, coal_mint_info, mint_info, bus_info, config_info, proof_info, ore_bus_info, ore_config_info, ore_proof_info, ore_directory_info, ore_reservation_info, ore_treasury_tokens_info, instructions_sysvar, slot_hashes_sysvar] =
         required_accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -42,7 +45,8 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
      let solution = Solution::new(args.digest, args.nonce);
      let hash = solution.to_hash();
      let difficulty = hash.difficulty();
-     let mine_accounts = &[
+     let mut boost_keys = None;
+     let mut mine_accounts = vec![
          coal_mint_info.clone(),
          ore_bus_info.clone(),
          ore_config_info.clone(),
@@ -50,9 +54,10 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
          instructions_sysvar.clone(),
          slot_hashes_sysvar.clone(),
      ];
-    
-     let mine_accounts = [mine_accounts, ore_optional_accounts].concat();
-     let ore_optional_accounts = optional_accounts.iter().map(|a| *a.key).collect();
+     if let [boost_info, _boost_proof_info, reservation_info] = boost_accounts {
+        boost_keys = Some((*boost_info.key, *reservation_info.key));
+        mine_accounts.extend_from_slice(boost_accounts);
+    }
     
     solana_program::program::invoke_signed(
         &ore_api::sdk::mine(
@@ -60,11 +65,28 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
             *proof_info.key,
             *ore_bus_info.key,
             solution,
-            ore_optional_accounts,
+            boost_keys,
         ),
         &mine_accounts,
         &[&[MINT, MINT_NOISE.as_slice(), &[MINT_BUMP]]]
     )?;
+
+    let rotate_accounts = [
+        proof_info.clone(),
+        ore_directory_info.clone(),
+        ore_proof_info.clone(),
+        ore_reservation_info.clone(),
+        ore_treasury_tokens_info.clone(),
+    ];
+
+    solana_program::program::invoke_signed(
+        &ore_boost_api::sdk::rotate(
+            *proof_info.key, 
+            *ore_proof_info.key
+        ),
+        &rotate_accounts,
+        &[&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref(), &[proof.bump as u8]]]
+    )?;     
 
     // Normalize the difficulty and calculate the reward amount.
     //
@@ -82,13 +104,13 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     //
     // Boosts are staking incentives that can multiply a miner's rewards. Up to 3 boosts can be applied
     // on any given mine operation.
-
+    // TODO handle COAL boosts with coal_optional_accounts
 
     // Apply bus limit.
     //
     // Busses are limited to distributing 1 ORE per epoch. The payout amount must be capped to whatever is
     // left in the selected bus. This limits the maximum amount that will be paid out for any given hash to 1 ORE.
-    let reward_actual = reward.min(bus.rewards).min(ONE_ORE);
+    let reward_actual = reward.min(bus.rewards).min(config.get_epoch_rewards().saturating_div(BUS_COUNT as u64));
 
     // Update balances.
     //

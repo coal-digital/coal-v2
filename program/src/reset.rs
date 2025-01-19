@@ -1,3 +1,5 @@
+use std::ops::Mul;
+
 use coal_api::prelude::*;
 use steel::*;
 
@@ -11,34 +13,52 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     };
     signer_info.is_signer()?;
     let bus_0 = bus_0_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[0]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 0)?;
     let bus_1 = bus_1_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[1]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 1)?;
     let bus_2 = bus_2_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[2]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 2)?;
     let bus_3 = bus_3_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[3]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 3)?;
     let bus_4 = bus_4_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[4]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 4)?;
     let bus_5 = bus_5_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[5]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 5)?;
     let bus_6 = bus_6_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[6]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 6)?;
     let bus_7 = bus_7_info
+        .has_seeds(&[BUS, mint_info.key.as_ref(), &[7]], &coal_api::ID)?
+        .is_writable()?
         .as_account_mut::<Bus>(&coal_api::ID)?
         .assert_mut(|b| b.id == 7)?;
     let config = config_info
         .is_config()?
+        .is_writable()?
+        .has_seeds(&[&CONFIG, mint_info.key.as_ref()], &coal_api::ID)?
         .as_account_mut::<Config>(&coal_api::ID)?;
     let mint = mint_info
-        .has_address(&MINT_ADDRESS)?
+        .has_address(&config.mint)?
         .is_writable()?
         .as_mint()?;
     treasury_info.is_treasury()?.is_writable()?;
@@ -57,8 +77,10 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
 
     // Update timestamp.
     config.last_reset_at = clock.unix_timestamp;
-
+    config.current_epoch = config.current_epoch.saturating_add(1);
+    
     // Reset bus accounts and calculate actual rewards mined since last reset.
+    let target_epoch_rewards = config.get_epoch_rewards();
     let busses = [bus_0, bus_1, bus_2, bus_3, bus_4, bus_5, bus_6, bus_7];
     let mut total_remaining_rewards = 0u64;
     let mut total_theoretical_rewards = 0u64;
@@ -70,23 +92,28 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
             total_theoretical_rewards.saturating_add(bus.theoretical_rewards);
 
         // Reset bus account for new epoch.
-        bus.rewards = BUS_EPOCH_REWARDS;
+        bus.rewards = config.get_epoch_rewards();
         bus.theoretical_rewards = 0;
     }
-    let total_epoch_rewards = MAX_EPOCH_REWARDS.saturating_sub(total_remaining_rewards);
+    let max_epoch_rewards = target_epoch_rewards.mul(8);
+    let total_epoch_rewards = max_epoch_rewards.saturating_sub(total_remaining_rewards);
 
     // Update base reward rate for next epoch.
     config.base_reward_rate =
         calculate_new_reward_rate(config.base_reward_rate, total_theoretical_rewards);
 
     // If base reward rate is too low, increment min difficulty by 1 and double base reward rate.
-    if config.base_reward_rate.le(&BASE_REWARD_RATE_MIN_THRESHOLD) {
+    let base_reward_rate_min_threshold = BASE_REWARD_RATE_MIN_THRESHOLD.saturating_mul(target_epoch_rewards).saturating_div(ONE_ORE);
+    
+    if config.base_reward_rate.le(&base_reward_rate_min_threshold) {
         config.min_difficulty = config.min_difficulty.checked_add(1).unwrap();
         config.base_reward_rate = config.base_reward_rate.checked_mul(2).unwrap();
     }
 
     // If base reward rate is too high, decrement min difficulty by 1 and halve base reward rate.
-    if config.base_reward_rate.ge(&BASE_REWARD_RATE_MAX_THRESHOLD) && config.min_difficulty.gt(&1) {
+    let base_reward_rate_max_threshold = BASE_REWARD_RATE_MAX_THRESHOLD.saturating_mul(target_epoch_rewards).saturating_div(ONE_ORE);
+    
+    if config.base_reward_rate.ge(&base_reward_rate_max_threshold) && config.min_difficulty.gt(&1) {
         config.min_difficulty = config.min_difficulty.checked_sub(1).unwrap();
         config.base_reward_rate = config.base_reward_rate.checked_div(2).unwrap();
     }
@@ -97,7 +124,7 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
     }
 
     // Fund the treasury token account.
-    let amount = MAX_SUPPLY
+    let amount = config.max_supply
         .saturating_sub(mint.supply)
         .min(total_epoch_rewards);
     
@@ -107,7 +134,7 @@ pub fn process_reset(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResul
         treasury_info,
         token_program,
         amount,
-        &[TREASURY, mint_info.key.as_ref()],
+        &[TREASURY],
     )?;
 
     Ok(())

@@ -1,5 +1,6 @@
 use coal_api::prelude::*;
 use ore_api;
+use ore_boost_api;
 use steel::*;
 
 /// Open creates a new proof account to track a miner's state.
@@ -8,7 +9,7 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
     let args = Open::try_from_bytes(data)?;
 
     // Load accounts.
-    let [signer_info, miner_info, payer_info, proof_info, ore_proof_info, mint_info, system_program, slot_hashes_info] =
+    let [signer_info, miner_info, payer_info, proof_info, ore_proof_info, ore_reservation_into, mint_info, system_program, slot_hashes_info] =
         accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -59,6 +60,25 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
             *payer_info.key,
         ),
         open_accounts,
+        &[&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref(), &[args.proof_bump]]]
+    )?;
+
+
+    let register_accounts = &[
+        proof_info.clone(),
+        payer_info.clone(),
+        ore_proof_info.clone(),
+        ore_reservation_into.clone(),
+        system_program.clone(),
+    ];
+    // Register the proof with the boost program
+    solana_program::program::invoke_signed(
+        &ore_boost_api::sdk::register(
+            *proof_info.key,
+            *payer_info.key,
+            *ore_proof_info.key
+        ),
+        register_accounts,
         &[&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref(), &[args.proof_bump]]]
     )?;
 

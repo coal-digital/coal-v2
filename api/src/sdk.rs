@@ -7,11 +7,12 @@ use ore_api::{
         TREASURY_TOKENS_ADDRESS as ORE_TREASURY_TOKENS_ADDRESS,
     },
 };
+use ore_boost_api::state::{reservation_pda, directory_pda};
 
 use crate::{
     consts::*,
     instruction::*,
-    state::{bus_pda, config_pda, proof_pda, treasury_pda},
+    state::{bus_pda, config_pda, proof_pda, treasury_pda, Ingredient},
 };
 
 /// Builds an auth instruction.
@@ -28,7 +29,7 @@ pub fn claim(mint: Pubkey, signer: Pubkey, beneficiary: Pubkey, amount: u64) -> 
     let proof = proof_pda(mint, signer).0;
     let ore_proof: (Pubkey, u8) = ore_proof_pda(signer);
 
-    let treasury = treasury_pda(mint);
+    let treasury = treasury_pda();
     let treasury_tokens_address = spl_associated_token_account::get_associated_token_address(
         &treasury.0,
         &mint,
@@ -82,30 +83,48 @@ pub fn mine(
     mint: Pubkey,
     signer: Pubkey,
     authority: Pubkey,
-    coal_bus: Pubkey,
+    bus: Pubkey,
     ore_bus: Pubkey,
     solution: Solution,
     additional_accounts: Vec<Pubkey>,
+    boost_keys: Option<(Pubkey, Pubkey)>,
 ) -> Instruction {
+    let config = config_pda(mint).0;
     let proof = proof_pda(mint, authority).0;
-    let required_accounts = vec![
+    let ore_proof: (Pubkey, u8) = ore_proof_pda(proof);
+    let ore_directory = directory_pda().0;
+    let ore_reservation = reservation_pda(ore_proof.0).0;
+    
+    let mut accounts = vec![
         AccountMeta::new(signer, true),
-        AccountMeta::new(MINT_ADDRESS, false),
-        AccountMeta::new(coal_bus, false),
-        AccountMeta::new_readonly(CONFIG_ADDRESS, false),
+        AccountMeta::new(mint, false),
+        AccountMeta::new(bus, false),
+        AccountMeta::new_readonly(config, false),
+        AccountMeta::new(proof, false),
         AccountMeta::new(ore_bus, false),
         AccountMeta::new_readonly(ORE_CONFIG_ADDRESS, false),
-        AccountMeta::new(proof, false),
+        AccountMeta::new(ore_proof.0, false),
+        AccountMeta::new_readonly(ore_directory, false),
+        AccountMeta::new(ore_reservation, false),
+        AccountMeta::new(ORE_TREASURY_TOKENS_ADDRESS, false),
         AccountMeta::new_readonly(sysvar::instructions::ID, false),
         AccountMeta::new_readonly(sysvar::slot_hashes::ID, false),
     ];
+
+    if let Some((boost_address, reservation_address)) = boost_keys {
+        accounts.push(AccountMeta::new_readonly(boost_address, false));
+        accounts.push(AccountMeta::new(ore_proof_pda(boost_address).0, false));
+        accounts.push(AccountMeta::new_readonly(reservation_address, false));
+    }
+
     let additional_accounts = additional_accounts
         .into_iter()
         .map(|pk| AccountMeta::new_readonly(pk, false))
         .collect();
+
     Instruction {
         program_id: crate::ID,
-        accounts: [required_accounts, additional_accounts].concat(),
+        accounts: [accounts, additional_accounts].concat(),
         data: Mine {
             digest: solution.d,
             nonce: solution.n,
@@ -118,6 +137,8 @@ pub fn mine(
 pub fn open(mint: Pubkey, signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
     let proof_pda: (Pubkey, u8) = proof_pda(mint, signer);
     let ore_proof_pda = ore_proof_pda(signer);
+    let ore_reservation_pda = reservation_pda(ore_proof_pda.0);
+    
     Instruction {
         program_id: crate::ID,
         accounts: vec![
@@ -126,6 +147,7 @@ pub fn open(mint: Pubkey, signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instr
             AccountMeta::new(payer, true),
             AccountMeta::new(proof_pda.0, false),
             AccountMeta::new(ore_proof_pda.0, false),
+            AccountMeta::new(ore_reservation_pda.0, false),
             AccountMeta::new(MINT_ADDRESS, false),
             AccountMeta::new_readonly(solana_program::system_program::ID, false),
             AccountMeta::new_readonly(sysvar::slot_hashes::ID, false),
@@ -241,7 +263,7 @@ pub fn initialize(signer: Pubkey, mint_noise: [u8; 16]) -> Instruction {
         bus_pda(mint_pda.0, 7),
     ];
     let config_pda = config_pda(mint_pda.0);
-    let treasury_pda = treasury_pda(mint_pda.0);
+    let treasury_pda = treasury_pda();
     let treasury_tokens_address = spl_associated_token_account::get_associated_token_address(
         &treasury_pda.0,
         &mint_pda.0,
@@ -286,11 +308,23 @@ pub fn initialize(signer: Pubkey, mint_noise: [u8; 16]) -> Instruction {
         ],
         data: Initialize {
             mint_noise,
-            treasury_bump: treasury_pda.1,
-            mint_bump: mint_pda.1,
+            treasury_bump: treasury_pda.1 as u64,
+            mint_bump: mint_pda.1 as u64,
+            migration_mint: MINT_V1_ADDRESS,
             metadata_name: METADATA_NAME.to_string().as_bytes()[..32].try_into().unwrap(),
             metadata_symbol: METADATA_SYMBOL.to_string().as_bytes()[..8].try_into().unwrap(),
             metadata_uri: METADATA_URI.to_string().as_bytes()[..128].try_into().unwrap(),
+            burned_ingredient: Ingredient {
+                mint: Pubkey::default(),
+                ratio: 0.0,
+            },
+            wrapped_ingredient: Ingredient {
+                mint: Pubkey::default(),
+                ratio: 0.0,
+            },
+            max_supply: ONE_ORE * 21_000_000,
+            schedule_epochs: 17_280, // 8 weeks
+            decay_basis_points: 2000, // 20%
         }
         .to_bytes(),
     }

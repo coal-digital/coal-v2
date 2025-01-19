@@ -1,5 +1,7 @@
 use steel::*;
 
+use crate::state::Ingredient;
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, TryFromPrimitive)]
 pub enum OreInstruction {
@@ -66,12 +68,18 @@ pub struct Upgrade {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Initialize {
-    pub treasury_bump: u8,
-    pub mint_bump: u8,
+    pub treasury_bump: u64,
+    pub mint_bump: u64,
     pub mint_noise: [u8; 16],
     pub metadata_name: [u8; 32],
     pub metadata_symbol: [u8; 8],
     pub metadata_uri: [u8; 128],
+    pub migration_mint: Pubkey,
+    pub max_supply: u64,
+    pub schedule_epochs: u64,
+    pub decay_basis_points: u64,
+    pub wrapped_ingredient: Ingredient,
+    pub burned_ingredient: Ingredient,
 }
 
 instruction!(OreInstruction, Claim);

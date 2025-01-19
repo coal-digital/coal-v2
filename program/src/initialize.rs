@@ -106,24 +106,28 @@ pub fn process_initialize(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramR
     )?;
     let config = config_info.as_account_mut::<Config>(&ore_api::ID)?;
     config.mint = *mint_info.key;
-    config.max_supply = MAX_SUPPLY;
+    config.max_supply = args.max_supply;
     config.current_epoch = 0;
     config.initial_epoch_rewards = TARGET_EPOCH_REWARDS;
-    config.schedule_epochs = 0;
-    config.decay_basis_points = 0;
+    config.schedule_epochs = args.schedule_epochs;
+    config.decay_basis_points = args.decay_basis_points;
     config.base_reward_rate = INITIAL_BASE_REWARD_RATE;
     config.last_reset_at = 0;
     config.min_difficulty = INITIAL_MIN_DIFFICULTY as u64;
     config.total_balance = 0;
+    config.burned_ingredient = args.burned_ingredient;
+    config.wrapped_ingredient = args.wrapped_ingredient;
 
-    // Initialize treasury.
-    create_account::<Treasury>(
-        treasury_info,
-        system_program,
-        signer_info,
-        &coal_api::ID,
-        &[TREASURY, mint_info.key.as_ref()],
-    )?;
+    if treasury_info.data_len() == 0 {
+        // Initialize treasury.
+        create_account::<Treasury>(
+            treasury_info,
+            system_program,
+            signer_info,
+            &coal_api::ID,
+            &[TREASURY],
+        )?;
+    }
 
     // Initialize mint.
     allocate_account_with_bump(
@@ -133,7 +137,7 @@ pub fn process_initialize(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramR
         Mint::LEN,
         &spl_token::ID,
         &[MINT, args.mint_noise.as_slice()],
-        MINT_BUMP,
+        args.mint_bump as u8,
     )?;
     initialize_mint_signed_with_bump(
         mint_info,
@@ -143,7 +147,7 @@ pub fn process_initialize(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramR
         rent_sysvar,
         TOKEN_DECIMALS,
         &[MINT, args.mint_noise.as_slice()],
-        MINT_BUMP,
+        args.mint_bump as u8,
     )?;
 
     // Initialize mint metadata.
@@ -182,16 +186,19 @@ pub fn process_initialize(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramR
         token_program,
         associated_token_program,
     )?;
-    // Initialize ORE treasury token account.
-    create_associated_token_account(
-        signer_info,
-        treasury_info,
-        ore_treasury_tokens_info,
-        ore_mint_info,
-        system_program,
-        token_program,
-        associated_token_program,
-    )?;
+
+    if ore_treasury_tokens_info.data_len() == 0 {
+        // Initialize ORE treasury token account.
+        create_associated_token_account(
+            signer_info,
+            treasury_info,
+            ore_treasury_tokens_info,
+            ore_mint_info,
+            system_program,
+            token_program,
+            associated_token_program,
+        )?;
+    }
 
     Ok(())
 }

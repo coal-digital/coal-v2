@@ -4,7 +4,7 @@ use solana_program::{pubkey, pubkey::Pubkey};
 use ore_api;
 
 /// The authority allowed to initialize the program.
-pub const INITIALIZER_ADDRESS: Pubkey = pubkey!("HBUh9g46wk2X89CvaNN15UmsznP59rh6od1h8JwYAopk");
+pub const INITIALIZER_ADDRESS: Pubkey = pubkey!("FJka1yJHn1SWux2X1o8VqHC8uaAWGv6CbNQvPWLJQufq");
 
 /// The base reward rate to intialize the program with.
 pub const INITIAL_BASE_REWARD_RATE: u64 = BASE_REWARD_RATE_MIN_THRESHOLD;
@@ -39,9 +39,6 @@ pub const EPOCH_MINUTES: i64 = 5;
 
 /// The duration of a program epoch, in seconds.
 pub const EPOCH_DURATION: i64 = ONE_MINUTE * EPOCH_MINUTES;
-
-/// The maximum token supply (5 million).
-pub const MAX_SUPPLY: u64 = ONE_ORE * 5_000_000;
 
 /// The target quantity of ORE to be mined per epoch.
 pub const TARGET_EPOCH_REWARDS: u64 = ONE_ORE * EPOCH_MINUTES as u64;
