@@ -9,12 +9,15 @@ pub fn process_open(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult 
     let args = Open::try_from_bytes(data)?;
 
     // Load accounts.
-    let [signer_info, miner_info, payer_info, proof_info, ore_proof_info, ore_reservation_into, mint_info, system_program, slot_hashes_info] =
+    let [signer_info, config_info, miner_info, payer_info, proof_info, ore_proof_info, ore_reservation_into, mint_info, system_program, slot_hashes_info] =
         accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
     signer_info.is_signer()?;
+    config_info.is_config()?
+        .as_account::<Config>(&coal_api::ID)?
+        .assert(|c| c.mint == *mint_info.key)?;
     payer_info.is_signer()?;
     proof_info
         .is_empty()?

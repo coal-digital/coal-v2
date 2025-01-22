@@ -1,4 +1,4 @@
-use ore_api::prelude::*;
+use coal_api::prelude::*;
 use steel::*;
 
 /// Update changes the miner authority on a proof account.
@@ -9,7 +9,7 @@ pub fn process_update(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResu
     };
     signer_info.is_signer()?;
     let proof = proof_info
-        .as_account_mut::<Proof>(&ore_api::ID)?
+        .as_account_mut::<Proof>(&coal_api::ID)?
         .assert_mut_err(
             |p| p.authority == *signer_info.key,
             ProgramError::MissingRequiredSignature,

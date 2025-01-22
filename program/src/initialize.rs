@@ -69,7 +69,7 @@ pub fn process_initialize(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramR
     treasury_info
         .is_empty()?
         .is_writable()?
-        .has_seeds(&[TREASURY], &ore_api::ID)?;
+        .has_seeds(&[TREASURY], &coal_api::ID)?;
     treasury_tokens_info.is_empty()?.is_writable()?;
     system_program.is_program(&system_program::ID)?;
     token_program.is_program(&spl_token::ID)?;
@@ -174,7 +174,7 @@ pub fn process_initialize(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramR
             collection_details: None,
         },
     }
-    .invoke_signed(&[&[TREASURY, mint_info.key.as_ref(), &[TREASURY_BUMP]]])?;
+    .invoke_signed(&[&[TREASURY, &[TREASURY_BUMP]]])?;
 
     // Initialize treasury token account.
     create_associated_token_account(

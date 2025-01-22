@@ -42,7 +42,7 @@ pub fn process_claim(accounts: &[AccountInfo<'_>], data: &[u8]) -> ProgramResult
         beneficiary_info,
         token_program,
         amount,
-        &[TREASURY, mint_info.key.as_ref()],
+        &[TREASURY],
     )?;
 
     // Claim remaining ORE to treasury when balance is 0.

@@ -97,7 +97,7 @@ pub fn mine(
     
     let mut accounts = vec![
         AccountMeta::new(signer, true),
-        AccountMeta::new(mint, false),
+        AccountMeta::new(MINT_ADDRESS, false),
         AccountMeta::new(bus, false),
         AccountMeta::new_readonly(config, false),
         AccountMeta::new(proof, false),
@@ -134,7 +134,9 @@ pub fn mine(
 }
 
 /// Builds an open instruction.
+/// signer_info, miner_info, payer_info, proof_info, ore_proof_info, ore_reservation_into, mint_info, system_program, slot_hashes_info
 pub fn open(mint: Pubkey, signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instruction {
+    let config = config_pda(mint).0;
     let proof_pda: (Pubkey, u8) = proof_pda(mint, signer);
     let ore_proof_pda = ore_proof_pda(signer);
     let ore_reservation_pda = reservation_pda(ore_proof_pda.0);
@@ -143,6 +145,7 @@ pub fn open(mint: Pubkey, signer: Pubkey, miner: Pubkey, payer: Pubkey) -> Instr
         program_id: crate::ID,
         accounts: vec![
             AccountMeta::new(signer, true),
+            AccountMeta::new_readonly(config, false),
             AccountMeta::new_readonly(miner, false),
             AccountMeta::new(payer, true),
             AccountMeta::new(proof_pda.0, false),

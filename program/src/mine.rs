@@ -18,7 +18,7 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
     let (required_accounts, optional_accounts) = accounts.split_at(14);
     let split_index = optional_accounts.iter().position(|acc| acc.owner.eq(&ore_boost_api::ID)).unwrap_or(optional_accounts.len());
     let (coal_optional_accounts, boost_accounts) = optional_accounts.split_at(split_index);
-    let [signer_info, coal_mint_info, mint_info, bus_info, config_info, proof_info, ore_bus_info, ore_config_info, ore_proof_info, ore_directory_info, ore_reservation_info, ore_treasury_tokens_info, instructions_sysvar, slot_hashes_sysvar] =
+    let [signer_info, coal_mint_info, bus_info, config_info, proof_info, ore_bus_info, ore_config_info, ore_proof_info, ore_directory_info, ore_reservation_info, ore_treasury_tokens_info, instructions_sysvar, slot_hashes_sysvar] =
         required_accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -85,7 +85,7 @@ pub fn process_mine(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
             *ore_proof_info.key
         ),
         &rotate_accounts,
-        &[&[PROOF, mint_info.key.as_ref(), signer_info.key.as_ref(), &[proof.bump as u8]]]
+        &[&[PROOF, config.mint.as_ref(), signer_info.key.as_ref(), &[proof.bump as u8]]]
     )?;     
 
     // Normalize the difficulty and calculate the reward amount.
